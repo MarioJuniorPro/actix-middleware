@@ -28,5 +28,9 @@ burst:
     wrk -t4 -c400 -d30s http://127.0.0.1:7008/
 
 ping:
-    watch -n 2 -c 'http ${HOST}:${PORT} -vv'
+    watch -n 2 --color http ${HOST}:${PORT} -vv --pretty all
+
+fix:
+    cargo clippy --fix --allow-dirty
+    cargo fmt
 
