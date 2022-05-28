@@ -1,44 +1,86 @@
 use std::env;
 
-use actix_web::middleware::Logger;
+use actix_web::dev::Extensions;
 use actix_web::{get, App, HttpServer};
+use actix_web::{middleware::*, Responder};
+use config::config::Config;
+// use serde::Deserialize;
+use std::{any::Any, net::SocketAddr};
+
+use actix_web::{rt::net::TcpStream, web, HttpRequest, HttpResponse};
+
+// use config::config::Config;
 
 use crate::middlewares::basic::SayHi;
 
+mod config;
 mod middlewares;
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+struct ConnectionInfo {
+    bind: SocketAddr,
+    peer: SocketAddr,
+    ttl: Option<u32>,
+}
 
 #[get("/")]
 async fn index() -> String {
-    format!(
-        "Welcome from {}:{}",
-        env::var("HOST").unwrap(),
-        env::var("PORT").unwrap()
-    )
+    let config = envy::from_env::<Config>().unwrap();
+    log::info!("Index hit!");
+    format!("Welcome from {}", &config.get_bind_addr())
+}
+
+fn get_conn_info(connection: &dyn Any, data: &mut Extensions) {
+    if let Some(sock) = connection.downcast_ref::<TcpStream>() {
+        data.insert(ConnectionInfo {
+            bind: sock.local_addr().unwrap(),
+            peer: sock.peer_addr().unwrap(),
+            ttl: sock.ttl().ok(),
+        });
+    } else {
+        unreachable!("connection should only be plaintext since no TLS is set up");
+    }
+}
+
+async fn route_whoami(req: HttpRequest) -> impl Responder {
+    match req.conn_data::<ConnectionInfo>() {
+        Some(info) => HttpResponse::Ok().body(format!(
+            "Here is some info about your connection:\n\n{:#?}",
+            info
+        )),
+        None => HttpResponse::InternalServerError().body("Missing expected request extension data"),
+    }
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
+    let config = envy::from_env::<Config>().unwrap();
 
-    env::set_var("RUST_LOG", "actix_web=info");
-    env_logger::init();
+    env::set_var(
+        "RUST_LOG",
+        "debug,simple-auth-server=debug,actix_web=info,actix_server=info",
+    );
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    let host = env::var("HOST").unwrap_or_else(|_| "localhost".to_string());
-    let port = env::var("PORT")
-        .unwrap_or_else(|_| 8080.to_string())
-        .parse::<u16>()
-        .unwrap();
+    println!("{:#?}", config);
 
-    println!("Starting server on {}:{}", host, port);
+    log::info!("staring server at http://{}", &config.get_bind_addr());
 
     HttpServer::new(|| {
         App::new()
-            .wrap(Logger::default())
+            // .wrap(Logger::default())
+            .wrap(DefaultHeaders::new().add(("X-Version", "0.2")))
+            .wrap(Compress::default())
+            .wrap(Logger::default().log_target("http_log"))
             .wrap(SayHi)
             .service(index)
+            .service(web::resource("/who").route(web::get().to(route_whoami)))
     })
+    .on_connect(get_conn_info)
     .workers(2)
-    .bind(format!("{}:{}", host, port))?
+    .bind(&config.get_bind_addr())?
     .run()
     .await
 }

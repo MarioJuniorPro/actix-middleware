@@ -34,3 +34,5 @@ fix:
     cargo clippy --fix --allow-dirty
     cargo fmt
 
+pr:
+    gh pr create --fill -w
