@@ -1,25 +1,20 @@
-
 use std::env;
 
-use actix_web::dev::{Extensions};
-use actix_web::{middleware::*, Responder};
+use actix_web::dev::Extensions;
 use actix_web::{get, App, HttpServer};
+use actix_web::{middleware::*, Responder};
 use config::config::Config;
 // use serde::Deserialize;
-use std::{any::Any, io, net::SocketAddr};
-use envy;
+use std::{any::Any, net::SocketAddr};
 
-use actix_web::{
-    rt::net::TcpStream, web, HttpRequest, HttpResponse
-    
-};
+use actix_web::{rt::net::TcpStream, web, HttpRequest, HttpResponse};
 
 // use config::config::Config;
 
 use crate::middlewares::basic::SayHi;
 
-mod middlewares;
 mod config;
+mod middlewares;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -33,9 +28,7 @@ struct ConnectionInfo {
 async fn index() -> String {
     let config = envy::from_env::<Config>().unwrap();
     log::info!("Index hit!");
-    format!(
-        "Welcome from {}", &config.get_bind_addr()
-    )
+    format!("Welcome from {}", &config.get_bind_addr())
 }
 
 fn get_conn_info(connection: &dyn Any, data: &mut Extensions) {
@@ -56,9 +49,7 @@ async fn route_whoami(req: HttpRequest) -> impl Responder {
             "Here is some info about your connection:\n\n{:#?}",
             info
         )),
-        None => {
-            HttpResponse::InternalServerError().body("Missing expected request extension data")
-        }
+        None => HttpResponse::InternalServerError().body("Missing expected request extension data"),
     }
 }
 
@@ -67,9 +58,11 @@ async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
     let config = envy::from_env::<Config>().unwrap();
 
-    env::set_var("RUST_LOG", "debug,simple-auth-server=debug,actix_web=info,actix_server=info");
+    env::set_var(
+        "RUST_LOG",
+        "debug,simple-auth-server=debug,actix_web=info,actix_server=info",
+    );
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-
 
     println!("{:#?}", config);
 
@@ -82,10 +75,8 @@ async fn main() -> std::io::Result<()> {
             .wrap(Compress::default())
             .wrap(Logger::default().log_target("http_log"))
             .wrap(SayHi)
-
             .service(index)
             .service(web::resource("/who").route(web::get().to(route_whoami)))
-            
     })
     .on_connect(get_conn_info)
     .workers(2)

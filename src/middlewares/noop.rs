@@ -1,9 +1,7 @@
 //! A no-op middleware. See [Noop] for docs.
 
 use actix_utils::future::{ready, Ready};
-use actix_web::dev::{ Service, Transform, forward_ready } ;
-
-
+use actix_web::dev::{forward_ready, Service, Transform};
 
 /// A no-op middleware that passes through request and response untouched.
 pub(crate) struct Noop;
